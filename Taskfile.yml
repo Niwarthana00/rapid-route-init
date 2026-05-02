@@ -1,0 +1,58 @@
+version: '3'
+
+vars:
+  BRANCHES: "dev master"
+  BASE_DIR: "{{.USER_WORKING_DIR}}/.."
+  REPOS: |
+    repo-one|git@github.com:sachintha00/Git-Wizard.git|https://github.com/sachintha00/Git-Wizard
+    repo-two|git@github.com:sachintha00/Multi-Tenant-Wizard.git|https://github.com/sachintha00/Multi-Tenant-Wizard
+
+
+tasks:
+  clone:
+    desc: "Clone ALL repos into ../ (SSH preferred, HTTPS fallback) — already cloned ones skip"
+    cmds:
+      - task: _run-all
+        vars: { FORCE_HTTPS: "false" }
+
+  clone-https:
+    desc: "Clone ALL repos into ../ (HTTPS forced) — already cloned ones skip"
+    cmds:
+      - task: _run-all
+        vars: { FORCE_HTTPS: "true" }
+
+  _run-all:
+    internal: true
+    silent: true 
+    vars:
+      FORCE_HTTPS: '{{.FORCE_HTTPS | default "false"}}'
+    cmds:
+      - |
+        echo '{{.REPOS}}' | while IFS='|' read -r NAME SSH HTTPS; do
+          [ -z "$NAME" ] && continue
+
+          TARGET="{{.BASE_DIR}}/$NAME"
+
+          if [ -d "$TARGET/.git" ]; then
+            echo "⏭  $NAME — already cloned, skipping"
+            continue
+          fi
+
+          if [ "{{.FORCE_HTTPS}}" = "true" ]; then
+            URL="$HTTPS"
+          else
+            URL="$SSH"
+          fi
+
+          echo "⬇  Cloning $NAME  →  $TARGET"
+          if git clone "$URL" "$TARGET"; then
+            echo "✅  $NAME cloned"
+          else
+            if [ "{{.FORCE_HTTPS}}" = "false" ]; then
+              echo "⚠  SSH failed, retrying with HTTPS..."
+              git clone "$HTTPS" "$TARGET" && echo "✅  $NAME cloned (HTTPS)" || echo "❌  $NAME failed"
+            else
+              echo "❌  $NAME failed"
+            fi
+          fi
+        done
